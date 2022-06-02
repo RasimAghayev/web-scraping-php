@@ -1,0 +1,17 @@
+{
+  "name": "rasimaghayev/webscraping",
+  "authors": [
+    {
+      "name": "Rasim",
+      "email": "rasimaqayev@gmail.com"
+    }
+  ],
+  "description": "Web Scraping",
+  "license": "proprietary",
+  "minimum-stability": "stable",
+  "require": {
+    "php": ">=7.4",
+    "fabpot/goutte": "^4.0",
+    "guzzlehttp/guzzle": "^7.4"
+  }
+}
