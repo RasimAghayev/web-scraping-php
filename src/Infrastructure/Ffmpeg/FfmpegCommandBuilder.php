@@ -24,6 +24,7 @@ final class FfmpegCommandBuilder
         private readonly string $ffmpegBin,
         private readonly string $videoCodec,
         private readonly string $audioCodec,
+        private readonly string $legacyPathPrefix = RenameManifestWriter::DEFAULT_LEGACY_PATH_PREFIX,
     ) {
     }
 
@@ -35,10 +36,10 @@ final class FfmpegCommandBuilder
      */
     public function reencodeCommand(string $inputPath, string $outputPath): string
     {
-        return $this->ffmpegBin . ' -i ' . RenameManifestWriter::stripLegacyPrefix($inputPath)
+        return $this->ffmpegBin . ' -i ' . RenameManifestWriter::stripLegacyPrefix($inputPath, $this->legacyPathPrefix)
             . ' -cpu-used 32 -map_metadata -1 ' . $this->videoCodec . ' ' . $this->audioCodec
             . ' -preset ultrafast -profile:v main -pix_fmt yuv420p -movflags +faststart '
-            . RenameManifestWriter::stripLegacyPrefix($outputPath);
+            . RenameManifestWriter::stripLegacyPrefix($outputPath, $this->legacyPathPrefix);
     }
 
     /**

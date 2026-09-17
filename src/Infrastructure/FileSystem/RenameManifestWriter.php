@@ -14,16 +14,22 @@ namespace WebScraping\VideoMerge\Infrastructure\FileSystem;
 final class RenameManifestWriter
 {
     /**
-     * PRESERVED QUIRK: strips a hardcoded prefix, `D:\IDM\IDM2\tt\`, from
-     * filenames before writing them — a different absolute path than the
-     * configurable source/dest directories used elsewhere in this
-     * application (D:\Video\zip\ / D:\Video\Dn\ by default). This looks
-     * like leftover state from a previous machine layout on the original
-     * author's setup. The "correct" value can't be inferred, only
-     * guessed, so it's kept exactly as a class constant here rather than
-     * silently dropped or "fixed" to match the configured directories.
+     * Historical value, preserved as the DEFAULT only. Was a hardcoded
+     * class constant with no override through the TASK-004 refactor —
+     * moved to config/video.php's `legacy_path_prefix`
+     * (`LEGACY_PATH_PREFIX` env var) in TASK-007, per an explicit
+     * follow-up request to pull literal list/path data like this out of
+     * code and into env. The "correct" value still can't be inferred —
+     * this looks like leftover state from a previous machine layout on
+     * the original author's setup — so the default stays exactly what it
+     * was; only the ability to override it is new.
      */
-    private const LEGACY_PATH_PREFIX = 'D:\IDM\IDM2\tt\\';
+    public const DEFAULT_LEGACY_PATH_PREFIX = 'D:\IDM\IDM2\tt\\';
+
+    public function __construct(
+        private readonly string $legacyPathPrefix = self::DEFAULT_LEGACY_PATH_PREFIX,
+    ) {
+    }
 
     /**
      * @param list<array{old: string, new1: string}> $videoFiles
@@ -34,8 +40,8 @@ final class RenameManifestWriter
         $concatContent = '';
 
         foreach ($videoFiles as $video) {
-            $oldContent .= str_ireplace(self::LEGACY_PATH_PREFIX, '', $video['old']) . "\n";
-            $concatContent .= 'file ' . str_ireplace([self::LEGACY_PATH_PREFIX, '\\'], ['', '/'], $video['new1']) . "\n";
+            $oldContent .= str_ireplace($this->legacyPathPrefix, '', $video['old']) . "\n";
+            $concatContent .= 'file ' . str_ireplace([$this->legacyPathPrefix, '\\'], ['', '/'], $video['new1']) . "\n";
         }
 
         // Random suffix, same as the original mt_rand() call — these are
@@ -46,8 +52,8 @@ final class RenameManifestWriter
         file_put_contents($sourceDir . '/' . $concatFileBase . '.txt', $concatContent);
     }
 
-    public static function stripLegacyPrefix(string $path): string
+    public static function stripLegacyPrefix(string $path, string $prefix = self::DEFAULT_LEGACY_PATH_PREFIX): string
     {
-        return str_ireplace([self::LEGACY_PATH_PREFIX, '\\'], ['', '/'], $path);
+        return str_ireplace([$prefix, '\\'], ['', '/'], $path);
     }
 }
