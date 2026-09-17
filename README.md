@@ -4,10 +4,28 @@ A small PHP toolkit with two independent parts:
 
 1. **Scraper** (`index.php`) — crawls a course-listing site and dumps the
    results as JSON, using Symfony's HTTP browser + DOM crawler components.
-2. **Video merge utility** (`video_merge.php` + `function.php`) — a local,
-   machine-specific CLI helper for stitching downloaded course videos into
-   fewer, longer MP4 files with `ffmpeg`. It is unrelated to the scraper and
-   is not portable out of the box (see [Video merge utility](#video-merge-utility)).
+2. **Video merge utility** (`bin/process.php`, `src/`) — a CLI helper for
+   stitching downloaded course videos into fewer, longer MP4 files with
+   `ffmpeg`. It is unrelated to the scraper and doesn't consume its output
+   (see [Video merge utility](#video-merge-utility)).
+
+### Architecture style
+
+Honest label, not an aspirational one ([R112]): the **scraper** is a single
+top-to-bottom script (`index.php`) — there's no layering to name. The
+**video-merge utility** is **Layered / Clean-Architecture-inspired**:
+`Domain/Video` (pure planning/rules, no I/O), `Infrastructure/*`
+(filesystem, ffmpeg, process-execution, metadata — each behind a narrow
+class or interface), `Application/CourseVideoMerger` (orchestration only),
+`Support` (framework-free helpers). `Infrastructure/Process` additionally
+uses interface-based dependency inversion (`ProcessExecutorInterface`,
+`BatchScriptBuilderInterface`) so `Application` can run against either the
+Windows or Linux execution pair without knowing which — see
+[docs/architecture.md](docs/architecture.md) for the full breakdown. It is
+**not** DDD (no entities/aggregates with enforced invariants, no ubiquitous
+language modeling), **not** CQRS (no command/query split), and **not**
+event-driven (no events/message bus) — those labels would describe an
+ambition the code doesn't have, not the code itself.
 
 ## Requirements
 
@@ -32,6 +50,20 @@ This installs the dependencies declared in `composer.json`:
 | `symfony/http-client` | ^6.4 | HTTP transport underlying browser-kit |
 | `symfony/css-selector` | ^6.4 | CSS-selector support for DOM crawling |
 | `james-heinrich/getid3` | ^1.9 | Video duration probing (video merge utility) |
+| `phpunit/phpunit` (dev) | ^10.5 | Test suite |
+| `phpstan/phpstan` (dev) | ^1.11 | Static analysis (`vendor/bin/phpstan analyse`) |
+
+> **PHP 8.1 ceiling, and why `composer.json` briefly said otherwise**: this
+> repo targets PHP >= 8.0 in principle but PHP 8.1 in practice (its own
+> `phpunit.xml.dist`/CI-equivalent runs on 8.1). Renovate had auto-merged
+> two bumps — `symfony/browser-kit` to `^8.0` and `phpunit/phpunit` to
+> `^13.0` — that both silently require PHP >= 8.4, breaking
+> `composer install` on 8.1 (verified: 23 "requires php >=8.4" resolution
+> failures). Fixed in TASK-007 by pinning back to the latest majors that
+> actually support 8.1 (`symfony/browser-kit ^6.4`, matching its
+> `http-client`/`css-selector` siblings; `phpunit/phpunit ^10.5`) — not a
+> revert of "newer is better", a correction of two merges that never
+> should have gone through un-gated for this project's real PHP floor.
 
 > **Note on `fabpot/goutte`**: this repo previously depended on it, but
 > Goutte is abandoned upstream and its `Client` class was itself just a
@@ -113,19 +145,21 @@ SCRAPE_URL="https://downloadly.ir/tag/easy-Learning/" php index.php > output.jso
 
 ## Video merge utility
 
-`video_merge.php` and `function.php` are a **separate, local automation
-tool** for the repo owner's own machine — they are not part of the scraper
-pipeline and don't consume its JSON output.
+`bin/process.php` (backed by `src/`) is a **separate CLI tool** — it is not
+part of the scraper pipeline and doesn't consume its JSON output.
+`video_merge.php` and `function.php` still exist as thin, deprecated
+compatibility shims over the same `src/` classes (see their own file
+headers); new usage should go through `bin/process.php` directly.
 
-**CLI only.** `video_merge.php` refuses to run under a web server (checks
-`PHP_SAPI`) and exits immediately if it detects one. The original version
+**CLI only.** The tool refuses to run under a web server (checks
+`PHP_SAPI`) and exits immediately if it detects one — the original version
 was a bare, unauthenticated HTML `<form method="post">` that, on submit,
-shelled out to a dynamically generated `.bat` file — if this script were
-ever reachable over HTTP, that was an unauthenticated remote-code-execution
+shelled out to a dynamically generated batch file; if this script were ever
+reachable over HTTP, that was an unauthenticated remote-code-execution
 path. Run it from a terminal instead:
 
 ```bash
-php video_merge.php
+php bin/process.php
 ```
 
 ### What it does
@@ -133,62 +167,87 @@ php video_merge.php
 Given a folder of downloaded course videos, it will:
 
 1. Recursively list every video file (`mp4`, `mov`, `f4v`, `mkv`, `avi`,
-   `wmv`, `mpg`, `flv`, `webm`, `m4v`) under a source directory.
-2. Read each file's duration with **getID3** (now a real, versioned
-   Composer dependency — `james-heinrich/getid3` — instead of an
-   undocumented manual copy expected at a hardcoded path).
-3. Generate an `ffmpeg concat` file list and a Windows batch (`.bat`) script.
-4. Run that batch script (via PHP's `system()`), which shells out to
-   `ffmpeg` to concatenate the clips into merged MP4 output(s), splitting
-   into multiple files if the combined runtime would exceed roughly 12
-   hours.
+   `wmv`, `mpg`, `flv`, `webm`, `m4v` by default — see `VIDEO_EXTENSIONS`
+   below) under a source directory.
+2. Read each file's duration with **getID3** (`james-heinrich/getid3`, a
+   real, versioned Composer dependency).
+3. Generate an `ffmpeg concat` file list and a staging/concat script.
+4. Run that script, which shells out to `ffmpeg` to re-encode each clip
+   and then concatenate them into merged MP4 output(s), splitting into
+   multiple files if the combined runtime would exceed roughly 12 hours.
+
+Step 3/4's script is either a Windows `.bat` (via `cmd.exe`) or a POSIX
+`.sh` (via `sh`) — see [Execution platform](#execution-platform) below;
+same ffmpeg command content either way, only the scripting wrapper differs.
 
 ### Configuration
 
-Still defaults to the original author's own machine layout, but every path
-is now overridable via environment variables instead of requiring a source
-edit:
+Every value below has a working default (the original author's own,
+Windows-only machine layout) and is overridable via environment variable —
+no source edit required:
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `VIDEO_SOURCE_DIR` | `D:\Video\zip\` | Where downloaded videos are read from |
 | `VIDEO_DEST_DIR` | `D:\Video\Dn\` | Where merged output is written |
 | `VIDEO_FOLDERS` | `MSK JavaScript Bootcamp` | Comma-separated subfolder names to process |
-| `FFMPEG_BIN` | `E:\DevOps\OpenServer\domains\videomerge.azp\old\ffmpeg\bin\ffmpeg.exe` | Path to `ffmpeg.exe` |
+| `FFMPEG_BIN` | `E:\DevOps\...\ffmpeg.exe` | Path to the `ffmpeg` binary |
+| `VIDEO_CODEC_ARGS` | `-c:v libx264 -s 1920x1080 -r 30 -b:v 2M` | ffmpeg video re-encode flags |
+| `AUDIO_CODEC_ARGS` | `-c:a aac -ac 2 -ar 44100 -b:a 192k` | ffmpeg audio re-encode flags |
+| `LEGACY_PATH_PREFIX` | `D:\IDM\IDM2\tt\` | A leftover machine-specific prefix stripped from manifest/ffmpeg paths — see `RenameManifestWriter`'s docblock for why the default can't be "corrected" |
+| `VIDEO_EXTENSIONS` | `mp4,mov,f4v,mkv,avi,wmv,mpg,flv,webm,m4v` | Recognized video extensions (case-insensitive) |
+| `VIDEO_MERGE_PLATFORM` | `auto` | `auto` \| `windows` \| `linux` — which execution pipeline to use, see below |
 
-Example:
+Full table with which class reads each value: `docs/architecture.md`.
+
+Example (bare metal, Windows):
 
 ```bash
 VIDEO_SOURCE_DIR="D:\Downloads\" VIDEO_DEST_DIR="D:\Merged\" \
 VIDEO_FOLDERS="Course A,Course B" FFMPEG_BIN="C:\ffmpeg\bin\ffmpeg.exe" \
-php video_merge.php
+php bin/process.php
 ```
+
+### Execution platform
+
+Two execution pipelines exist side by side, selected by `VIDEO_MERGE_PLATFORM`
+(`config/video.php`'s `platform` key):
+
+- **`windows`** (the tool's original design, still the default when run
+  directly on a Windows host): `BatchScriptBuilder` generates a `.bat`
+  script; `ProcessExecutor` runs it via `system('cmd /c ' . $path)`.
+- **`linux`** (added in TASK-007, and what the Docker image below uses):
+  `ShellScriptBuilder` generates a POSIX `.sh` script (same ffmpeg command
+  content, no `cmd.exe`-specific staging); `LinuxShellProcessExecutor` runs
+  it via `system('sh ' . escapeshellarg($path))`. Path-building
+  (`VideoBatchPlanner`, `CourseVideoMerger`) also switches from `\` to `/`
+  under this mode, since a literal backslash is just an ordinary filename
+  character on Linux, not a separator.
+- **`auto`** (the config default) detects via `PHP_OS_FAMILY`.
+
+Selection happens in one place — `Infrastructure\Process\PlatformResolver`
+— everything downstream (`CourseVideoMerger`) just uses whichever
+interface implementation (`ProcessExecutorInterface`,
+`BatchScriptBuilderInterface`) comes back.
 
 ### Known limitations (flagged, not fixed in this pass)
 
-- **Still Windows-shaped**: paths, the generated `.bat` script, and
-  `system()`-driven execution all assume Windows even after
-  parameterization — only *where* things point is configurable now, not
-  the OS assumptions baked into the generated commands.
-- **`getDirContents()` in `function.php`** returns either an array or the
-  string `'Qovluq yoxdur--'` depending on whether the source directory
-  exists; every caller assumes an array. A missing/misconfigured
-  `VIDEO_SOURCE_DIR` produces a PHP warning (`foreach() argument must be
-  of type array|object, string given`) rather than a clean error message.
-  Left as-is — deciding what should happen instead (throw? return `[]`?
-  a clear CLI error?) is a real behavior decision, not something to guess
-  at silently.
-- **`file_write()` in `function.php`** strips a hardcoded prefix,
-  `D:\IDM\IDM2\tt\`, from filenames — a different absolute path than the
-  configurable source/dest directories above. This looks like leftover
-  state from a previous machine layout; the "correct" value can't be
-  inferred, so it's left untouched.
-- No `ffmpeg` version/flag portability beyond what's baked into
-  `function.php` (codec, resolution, bitrate are hardcoded there).
+- **No `ffmpeg` flag/codec portability beyond `VIDEO_CODEC_ARGS`/
+  `AUDIO_CODEC_ARGS`** — those two env vars cover the re-encode step;
+  every other ffmpeg flag (concat/segment output specs in
+  `FfmpegCommandBuilder`) is still a fixed literal.
+- **The Windows `mkdir`/`move`/`rename` preamble in `BatchScriptBuilder`
+  is dead code** on the current file-naming scheme (verified: it targets
+  patterns no file `VideoBatchPlanner::plan()` produces actually matches)
+  — left exactly as the original had it (still byte-identical for the
+  Windows path), not fixed, since "fix a dead branch nobody's relying on"
+  and "preserve this exact tool's behavior" are in tension and this pass
+  chose the latter for the Windows path specifically. `ShellScriptBuilder`
+  (the new Linux path) simply doesn't reproduce it.
 
 ## Docker
 
-The **scraper only** is containerized. Build and run:
+Two services: `scraper` and `video-merge`.
 
 ```bash
 docker compose build
@@ -206,27 +265,44 @@ SCRAPE_URL="https://downloadly.ir/tag/easy-Learning/" docker compose run --rm sc
 the live site returned valid JSON — 33 articles, `next_link: []` — the same
 signature as the bare-metal run documented above.
 
-### Why the video-merge utility has no Docker service
+### Video-merge in Docker
 
-`video_merge.php`/`bin/process.php`'s execution path
-(`ProcessExecutor::runBatchFile()`) shells out to Windows `cmd.exe` against
-a generated `.bat` script — see [Known limitations](#known-limitations-flagged-not-fixed-in-this-pass)
-above ("Still Windows-shaped"). That's the tool's actual design, not a
-missing Docker config. The source is still copied into the scraper image
-(one codebase, nothing to gain from splitting it), but `cmd` does not exist
-in a Linux container — invoking it there fails fast with "command not
-found" rather than silently doing nothing or corrupting output. Rewriting
-the batch-generation into a Linux-native ffmpeg pipeline would be new
-business logic (a real behavior change to preserved, deliberately
-untouched code), which is out of scope for a Docker-packaging pass — see
-`docs/fixes.md` if that rewrite is ever wanted as its own task.
+TASK-007 made this real, where it was previously excluded entirely (the
+tool's only hard Windows dependencies were an `ffmpeg.exe` binary at a
+fixed path, and shelling out to `cmd.exe` — both now have a real Linux
+counterpart, see [Execution platform](#execution-platform) above). The
+image obtains `ffmpeg` from a **dedicated ffmpeg image**
+(`mwader/static-ffmpeg`), copied in via multi-stage `COPY --from=` exactly
+like `vendor/` is copied from the composer stage — not `apk`-installed,
+not manually downloaded.
+
+```bash
+mkdir -p data/video-source/my-course data/video-dest
+# ...copy your course's video files into data/video-source/my-course...
+VIDEO_MERGE_FOLDERS=my-course docker compose run --rm video-merge
+# merged output appears under data/video-dest/
+```
+
+**Verified for real**, not just built: generated two short synthetic clips
+with `ffmpeg`'s own `lavfi` test sources (2s + 3s), ran the containerized
+tool against them end-to-end, and confirmed the final merged output's
+duration (`ffprobe`: 5.06s) matches the sum of the inputs — the full
+re-encode + concat pipeline, sourcing `ffmpeg` from the dedicated image,
+actually works inside the container.
+
+The `scraper` and `video-merge` services build from the same `Dockerfile`
+(single codebase); `video-merge` overrides `command` to run
+`bin/process.php` instead of the default `index.php`.
 
 ### Resource limits
 
-`docker-compose.yml` caps the `scraper` service at 0.5 CPU / 128MB memory /
-50 PIDs (R60/R64) and runs with `no-new-privileges`. No bind mounts are
-declared — the scraper is stateless (remote URL in, JSON to stdout), so
-there's nothing to persist on disk; redirect stdout to capture output.
+`docker-compose.yml` caps `scraper` at 0.5 CPU / 128MB memory / 50 PIDs and
+`video-merge` at 2.0 CPU / 2GB memory / 100 PIDs (R60/R64 — video
+re-encoding is genuinely heavier than one HTTP GET), both with
+`no-new-privileges`. `scraper` declares no bind mounts (stateless: remote
+URL in, JSON to stdout). `video-merge` binds two host directories
+(`VIDEO_MERGE_SOURCE_DIR`/`VIDEO_MERGE_DEST_DIR`, see `.env.example`) since
+it genuinely reads and writes files on disk.
 
 ## License
 

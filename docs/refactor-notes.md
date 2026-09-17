@@ -5,6 +5,12 @@ video-merge utility (TASK-004, following TASK-002/TASK-003's documentation
 and dependency passes — see `.sdd/projects/web-scraping-php.sdd`). It
 follows the required 10-section output format.
 
+> This is the **history** of how `src/` got its current shape, kept for
+> the byte-identical-behavior verification detail. For the **current**
+> structure/configuration/platform-selection reference, see
+> `docs/architecture.md`; for day-to-day commands, `docs/development.md`.
+> Both added in TASK-007.
+
 ## 1. Current Code Analysis
 
 **What the tool does**: a local, single-machine CLI utility that takes a
