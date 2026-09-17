@@ -1,5 +1,31 @@
 <?php
 
+/**
+ * Video-merge internals used by video_merge.php. Local/single-machine
+ * automation, not a general-purpose library — see README.md "Video merge
+ * utility" for the full caveats.
+ *
+ * Best-practice pass changes (video_merge.php's changes explain the
+ * bigger picture — CLI guard, fixed `functions.php`/`function.php`
+ * filename bug, Composer-managed getID3):
+ * - The two hardcoded ffmpeg.exe absolute paths below are now overridable
+ *   via FFMPEG_BIN, falling back to the original path so nothing changes
+ *   for whoever already has ffmpeg installed exactly there.
+ *
+ * Flagged, NOT fixed (real pre-existing issues, out of scope for this
+ * pass — changing them would change behavior/output, not just syntax):
+ * - getDirContents() returns either an array or the string
+ *   'Qovluq yoxdur--' depending on whether $dir exists. Every caller
+ *   assumes an array; a missing directory would make file_listed()'s
+ *   `foreach ($files as ...)` fatal on a string instead of failing
+ *   cleanly. Needs an actual decision (throw? return []?), not a guess.
+ * - file_write() strips a hardcoded prefix, 'D:\IDM\IDM2\tt\', from
+ *   filenames — a different absolute path than $dir0/$dir3 elsewhere in
+ *   this file (D:\Video\zip\ / D:\Video\Dn\ by default). Looks like
+ *   leftover state from a previous machine layout; left as-is since the
+ *   "correct" value can't be inferred, only guessed.
+ */
+
 $list_video_filename=["mp4","mov","f4v","mkv","avi","wmv","mpg","flv","webm","m4v" ];
 /*
 * Listed dir and subdir folder
@@ -145,7 +171,8 @@ function file_write($dir0,$old_file,$new_file,&$results = array()) : string{
     foreach ($results as $key => $value) {
         $old_content .= str_ireplace(array('D:\IDM\IDM2\tt\\'),array(''),$value['old']) . "\n";
         $new_content .= "file " . str_ireplace(array('D:\IDM\IDM2\tt\\','\\'),array('','/'),$value['new1']) . "\n";
-        $cmd_content .= "E:\\DevOps\\OpenServer\\domains\\videomerge.azp\\old\\ffmpeg\bin\\ffmpeg.exe -i " . str_ireplace(array('D:\IDM\IDM2\tt\\','\\'),array('','/'),$value['new']) .
+        $ffmpegBin = getenv('FFMPEG_BIN') ?: "E:\\DevOps\\OpenServer\\domains\\videomerge.azp\\old\\ffmpeg\\bin\\ffmpeg.exe";
+        $cmd_content .= $ffmpegBin . " -i " . str_ireplace(array('D:\IDM\IDM2\tt\\','\\'),array('','/'),$value['new']) .
             " -cpu-used 32 -map_metadata -1 ".$video_codec." ".$audio_codec." -preset ultrafast -profile:v main -pix_fmt yuv420p -movflags +faststart " . str_ireplace(array('D:\IDM\IDM2\tt\\','\\'),array('','/'),$value['new1']) . "\n";
     }
     file_put_contents($dir0."/".$old_file.mt_rand().".txt", $old_content);
@@ -192,9 +219,9 @@ function runProccess($dir1s,$dir0,$dir4){
         $convert0.='cd '.$dir3.'\1\ '."\n";
         $convert0.='rename *.mp41 *.mp4'."\n";
         $convert0.='cd '.$dir3.'\ '."\n";
-        //E:\\DevOps\\OpenServer\\domains\\videomerge.azp\\old\\ffmpeg
         //$convert0='del /S /F /Q '.$dir3.'\*.mp41 && del /S /F /Q '.$dir3.'\*.webm1 && del /S /F /Q '.$dir3.'\*.mkv1 && del /S /F /Q '.$dir3.'\*.mov1 && del /S /F /Q '.$dir3.'\*.f4v1 '."\n";
-        $convert0.='E:\\DevOps\\OpenServer\\domains\\videomerge.azp\\old\\ffmpeg\\bin\\ffmpeg.exe -safe 0 -f concat -segment_time_metadata 1 -i '.$dir0.$dir2.'.txt ';//-bsf:v h264_mp4toannexb
+        $ffmpegBin = getenv('FFMPEG_BIN') ?: 'E:\\DevOps\\OpenServer\\domains\\videomerge.azp\\old\\ffmpeg\\bin\\ffmpeg.exe';
+        $convert0.=$ffmpegBin.' -safe 0 -f concat -segment_time_metadata 1 -i '.$dir0.$dir2.'.txt ';//-bsf:v h264_mp4toannexb
         if($twelve<1){
             $convert0.='-c copy '.$dir3.'.mp4 ';
         }else{

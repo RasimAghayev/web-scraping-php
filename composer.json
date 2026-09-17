@@ -10,9 +10,11 @@
   "license": "proprietary",
   "minimum-stability": "stable",
   "require": {
-    "php": ">=7.4",
-    "fabpot/goutte": "^4.0",
-    "guzzlehttp/guzzle": "^7.4",
-    "ext-json": "*"
+    "php": ">=8.0",
+    "ext-json": "*",
+    "james-heinrich/getid3": "^1.9",
+    "symfony/browser-kit": "^6.4",
+    "symfony/http-client": "^6.4",
+    "symfony/css-selector": "^6.4"
   }
 }
