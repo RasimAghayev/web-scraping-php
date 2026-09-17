@@ -40,18 +40,17 @@ final class DirectoryScannerTest extends TestCase
     }
 
     /**
-     * NOT a bug introduced by this refactor — see DirectoryScanner's
-     * "PRESERVED QUIRK" docblock. A missing directory returns a
-     * hardcoded Azerbaijani string instead of an empty array or an
-     * exception; verified against the original getDirContents() by
-     * actually running it against a missing directory during this
-     * refactor.
+     * TASK-007: was 'Qovluq yoxdur--' (a hardcoded Azerbaijani sentinel
+     * string) through the TASK-004 refactor — see DirectoryScanner's
+     * docblock for the full history. Fixed to throw per an explicit
+     * follow-up request to stop signaling errors via embedded literal
+     * strings.
      */
-    public function testMissingDirectoryReturnsTheLegacySentinelString(): void
+    public function testMissingDirectoryThrows(): void
     {
-        self::assertSame(
-            'Qovluq yoxdur--',
-            DirectoryScanner::scan($this->tempDir . '-does-not-exist')
-        );
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('does not exist');
+
+        DirectoryScanner::scan($this->tempDir . '-does-not-exist');
     }
 }

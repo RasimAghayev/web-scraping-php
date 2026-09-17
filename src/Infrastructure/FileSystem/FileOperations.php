@@ -12,14 +12,24 @@ use RuntimeException;
  * The original used die() with a bare Azerbaijani message on copy/rename
  * failure ("Nese seflik var faylin yerdeyismesinde." / "...ad
  * deyismesinde." — "something's wrong moving/renaming the file"),
- * killing the PHP process immediately and unconditionally. That's
- * replaced with a RuntimeException carrying the same message plus the
+ * killing the PHP process immediately and unconditionally. Replaced with
+ * a RuntimeException carrying an equivalent English message plus the
  * actual paths involved, which:
  *   - stays testable (a die() can't be asserted against in a unit test;
  *     an exception can),
- *   - preserves the OBSERVABLE behavior end-to-end: bin/process.php's
- *     top-level catch prints the same message and exits(1), so a script
- *     run from the CLI still stops the same way it always did.
+ *   - preserves the OBSERVABLE control-flow behavior end-to-end:
+ *     bin/process.php's top-level catch still prints a one-line message
+ *     and exits(1), so a script run from the CLI stops the same way it
+ *     always did.
+ *
+ * TASK-007: the message TEXT itself changed (Azerbaijani -> English) —
+ * the same fix already applied to DirectoryScanner's sentinel string,
+ * extended here to the two hardcoded Azerbaijani messages found in this
+ * class, per an explicit follow-up request to replace embedded literal
+ * strings like these. Not "preserve behavior" territory (that mandate
+ * covers the TASK-004 refactor's own scope); this task's instruction is
+ * explicitly to fix this exact pattern wherever it appears.
+ *
  * copy()/unlink() are unused by the current flow (only "rename" is ever
  * called from CourseVideoMerger, matching the original's only call site
  * in runProccess()) but are kept for parity with the original's public
@@ -35,7 +45,7 @@ final class FileOperations
         foreach ($files as $file) {
             if (!copy($file['old'], $file['new'])) {
                 throw new RuntimeException(sprintf(
-                    'Nese seflik var faylin yerdeyismesinde. (copy %s -> %s)',
+                    'Something went wrong copying the file. (copy %s -> %s)',
                     $file['old'],
                     $file['new']
                 ));
@@ -51,7 +61,7 @@ final class FileOperations
         foreach ($files as $file) {
             if (!rename($file['old'], $file['new'])) {
                 throw new RuntimeException(sprintf(
-                    'Nese seflik var faylin ad deyismesinde. (rename %s -> %s)',
+                    'Something went wrong renaming the file. (rename %s -> %s)',
                     $file['old'],
                     $file['new']
                 ));
