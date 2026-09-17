@@ -1,0 +1,16 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+    paths:
+        - src
+        - bin
+    excludePaths:
+        - vendor
+    # function.php/index.php/video_merge.php are intentionally left out:
+    # they're the deprecated global-function compatibility shims (see
+    # function.php's own header) and the un-namespaced legacy entry
+    # points, not the code this task's "best-practice tooling" addition
+    # is meant to hold to a static-analysis bar going forward. src/ and
+    # bin/ are where new/changed code actually lives.
