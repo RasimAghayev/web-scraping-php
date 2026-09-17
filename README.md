@@ -186,6 +186,48 @@ php video_merge.php
 - No `ffmpeg` version/flag portability beyond what's baked into
   `function.php` (codec, resolution, bitrate are hardcoded there).
 
+## Docker
+
+The **scraper only** is containerized. Build and run:
+
+```bash
+docker compose build
+docker compose run --rm scraper > output.json
+```
+
+Override the target page the same way as bare-metal, via env (`.env`, copy
+from `.env.example`, or inline):
+
+```bash
+SCRAPE_URL="https://downloadly.ir/tag/easy-Learning/" docker compose run --rm scraper > output.json
+```
+
+**Verified**: a real `docker compose build` + `docker compose run` against
+the live site returned valid JSON — 33 articles, `next_link: []` — the same
+signature as the bare-metal run documented above.
+
+### Why the video-merge utility has no Docker service
+
+`video_merge.php`/`bin/process.php`'s execution path
+(`ProcessExecutor::runBatchFile()`) shells out to Windows `cmd.exe` against
+a generated `.bat` script — see [Known limitations](#known-limitations-flagged-not-fixed-in-this-pass)
+above ("Still Windows-shaped"). That's the tool's actual design, not a
+missing Docker config. The source is still copied into the scraper image
+(one codebase, nothing to gain from splitting it), but `cmd` does not exist
+in a Linux container — invoking it there fails fast with "command not
+found" rather than silently doing nothing or corrupting output. Rewriting
+the batch-generation into a Linux-native ffmpeg pipeline would be new
+business logic (a real behavior change to preserved, deliberately
+untouched code), which is out of scope for a Docker-packaging pass — see
+`docs/fixes.md` if that rewrite is ever wanted as its own task.
+
+### Resource limits
+
+`docker-compose.yml` caps the `scraper` service at 0.5 CPU / 128MB memory /
+50 PIDs (R60/R64) and runs with `no-new-privileges`. No bind mounts are
+declared — the scraper is stateless (remote URL in, JSON to stdout), so
+there's nothing to persist on disk; redirect stdout to capture output.
+
 ## License
 
 Proprietary (see `composer.json`).

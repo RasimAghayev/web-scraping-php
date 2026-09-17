@@ -1,0 +1,10 @@
+# Rebuilt fresh inside the composer-vendor build stage — never trust a
+# host-local vendor/ (it's gitignored; see .gitignore) inside the image.
+vendor/
+
+.git/
+.idea/
+tests/
+docs/
+.phpunit.result.cache
+*.md

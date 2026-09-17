@@ -1,0 +1,31 @@
+# web-scraping-php — scraper container.
+#
+# Only one service: `scraper`. See Dockerfile header for why the
+# video-merge utility has no service here (Windows cmd.exe dependency,
+# not a Docker-config gap).
+#
+# [R92] No bind mounts are declared. index.php is stateless — it reads a
+# remote URL and writes JSON to stdout; there is no on-disk state to
+# persist. Capture output on the host via
+# `docker compose run --rm scraper > output.json` (stdout redirection
+# needs no volume).
+# [R60/R64/R102] Resource limits declared with the classic top-level
+# fields (cpu/memory/pids), enforced by a plain `docker compose up`/`run`
+# without needing `--compatibility` or Swarm.
+# [R91] Local build only — no external/registry image referenced for the
+# one service this repo defines.
+
+services:
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    environment:
+      SCRAPE_URL: ${SCRAPE_URL:-https://downloadly.ir/download/elearning/video-tutorials/}
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 50
+    security_opt:
+      - no-new-privileges:true
