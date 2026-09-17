@@ -21,11 +21,19 @@ use WebScraping\VideoMerge\Support\Slugger;
  * ChapterDescriptionBuilder, FileOperations::rename()) is happy to read
  * the same five keys. Wrapping it in a class here would be ceremony
  * without a real problem to solve.
+ *
+ * TASK-007: `$pathSeparator` was a hardcoded `'\\'` literal below through
+ * the TASK-004 refactor. Made injectable (default unchanged) so a Linux
+ * run — where a literal backslash is just an ordinary filename
+ * character, not a path separator — builds `new`/`new1` as real,
+ * renameable paths instead of one long backslash-containing filename.
+ * See PlatformResolver, which is the only thing that ever passes '/'.
  */
 final class VideoBatchPlanner
 {
     public function __construct(
         private readonly GetId3DurationReader $durationReader,
+        private readonly string $pathSeparator = '\\',
     ) {
     }
 
@@ -61,8 +69,8 @@ final class VideoBatchPlanner
 
             $results[] = [
                 'old' => $file,
-                'new' => $destinationDir . '\\' . $index . '-' . Slugger::slug(self::basename($file)) . '1',
-                'new1' => $destinationDir . '\\' . $index . '.mp4',
+                'new' => $destinationDir . $this->pathSeparator . $index . '-' . Slugger::slug($this->basename($file)) . '1',
+                'new1' => $destinationDir . $this->pathSeparator . $index . '.mp4',
                 'duration_sec' => $cumulativeDuration,
                 'duration_sec1' => $durationSeconds,
                 'duration_time' => DurationFormatter::format($cumulativeDuration - ($durationSeconds ?? 0.0)),
@@ -75,19 +83,26 @@ final class VideoBatchPlanner
     }
 
     /**
-     * Matches the original's `substr(strrchr($value, "\\"), 1)` exactly,
-     * including its edge case: if $path has no backslash at all,
+     * Matches the original's `substr(strrchr($value, "\\"), 1)` exactly
+     * for the Windows default (`$this->pathSeparator === '\\'`),
+     * including its edge case: if $path has no separator at all,
      * strrchr() returns false, and the original's substr(false, 1)
      * silently coerced to substr('', 1) === '' (no strict_types in the
-     * original file). Reproduced here rather than "fixed" to return the
-     * whole path, since that would be a real behavior change for an
-     * input shape this code has likely never actually seen (every real
-     * caller passes a Windows absolute path from DirectoryScanner).
+     * original file). That edge case is unreachable on the Windows path
+     * in practice (every real caller passes a Windows absolute path from
+     * DirectoryScanner) so it's left exactly as-is rather than "fixed" to
+     * return the whole path.
+     *
+     * TASK-007: now looks for `$this->pathSeparator` instead of a
+     * hardcoded backslash — on Linux, DirectoryScanner::scan() returns
+     * realpath()-normalized paths that use `/`, and a literal backslash
+     * search would never match one of those, silently degrading every
+     * file's slug to '' instead of its real basename.
      */
-    private static function basename(string $path): string
+    private function basename(string $path): string
     {
-        $lastBackslash = strrchr($path, '\\');
+        $lastSeparator = strrchr($path, $this->pathSeparator);
 
-        return $lastBackslash === false ? '' : substr($lastBackslash, 1);
+        return $lastSeparator === false ? '' : substr($lastSeparator, strlen($this->pathSeparator));
     }
 }

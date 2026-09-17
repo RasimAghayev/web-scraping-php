@@ -22,8 +22,14 @@ use WebScraping\VideoMerge\Infrastructure\Ffmpeg\FfmpegCommandBuilder;
  * line, and that's exactly what the original did (and what this
  * reproduces) — segmentOutputSpec() calls are concatenated onto the same
  * script line, not run as separate commands.
+ *
+ * TASK-007: implements BatchScriptBuilderInterface now that a second
+ * implementation exists for Linux — see ShellScriptBuilder, which
+ * deliberately drops the `mkdir/move/rename` preamble below (see its own
+ * docblock for why: that preamble is dead code even here — verified it
+ * matches no file the current naming scheme ever produces).
  */
-final class BatchScriptBuilder
+final class BatchScriptBuilder implements BatchScriptBuilderInterface
 {
     public function __construct(
         private readonly FfmpegCommandBuilder $ffmpeg,
@@ -40,6 +46,17 @@ final class BatchScriptBuilder
      */
     public function build(string $sourceDir, string $destDir, string $slug, float $budgetRatio): string
     {
+        // NOTED, not touched (TASK-007): this mkdir/move/rename preamble
+        // targets `*.*1` (a base name, a dot, then a trailing "1") and
+        // later `*.mp41`. Neither pattern matches anything
+        // VideoBatchPlanner::plan() actually produces today — `new` has
+        // no dot at all (`{index}-{slug}1`) and `new1` already ends in
+        // plain `.mp4`, not `.mp41`. In cmd.exe this means `move` finds
+        // no match, fails, and the batch simply continues to the next
+        // line — an apparently-dead no-op, not a crash. Left exactly as
+        // the original had it (byte-identical is still the mandate for
+        // the Windows path); ShellScriptBuilder's Linux equivalent omits
+        // it rather than port a no-op.
         $script = 'mkdir ' . $destDir . '\1 && move ' . $destDir . '\*.*1 ' . $destDir . '\1\ ' . "\n";
         $script .= 'cd ' . $destDir . '\1\ ' . "\n";
         $script .= 'rename *.mp41 *.mp4' . "\n";

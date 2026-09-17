@@ -11,8 +11,8 @@ use WebScraping\VideoMerge\Infrastructure\FileSystem\DirectoryScanner;
 use WebScraping\VideoMerge\Infrastructure\FileSystem\FileOperations;
 use WebScraping\VideoMerge\Infrastructure\FileSystem\RenameManifestWriter;
 use WebScraping\VideoMerge\Infrastructure\Ffmpeg\FfmpegCommandBuilder;
-use WebScraping\VideoMerge\Infrastructure\Process\BatchScriptBuilder;
-use WebScraping\VideoMerge\Infrastructure\Process\ProcessExecutor;
+use WebScraping\VideoMerge\Infrastructure\Process\BatchScriptBuilderInterface;
+use WebScraping\VideoMerge\Infrastructure\Process\ProcessExecutorInterface;
 use WebScraping\VideoMerge\Support\Slugger;
 
 /**
@@ -29,6 +29,15 @@ use WebScraping\VideoMerge\Support\Slugger;
  * runProccess to CourseVideoMerger — "process" said nothing about what
  * was being processed; "merger" matches what the class (and the whole
  * utility) actually does.
+ *
+ * TASK-007: $batchScriptBuilder/$processExecutor are now typed to their
+ * interfaces (BatchScriptBuilderInterface/ProcessExecutorInterface) so
+ * this class works unchanged against either the Windows pair
+ * (BatchScriptBuilder/ProcessExecutor) or the new Linux pair
+ * (ShellScriptBuilder/LinuxShellProcessExecutor) — see PlatformResolver,
+ * which is what bin/process.php and function.php now use to build the
+ * right pair (plus $pathSeparator/$scriptExtension below) instead of
+ * hardcoding the Windows ones directly.
  */
 final class CourseVideoMerger
 {
@@ -37,8 +46,10 @@ final class CourseVideoMerger
         private readonly FfmpegCommandBuilder $ffmpeg,
         private readonly FileOperations $fileOperations,
         private readonly RenameManifestWriter $manifestWriter,
-        private readonly BatchScriptBuilder $batchScriptBuilder,
-        private readonly ProcessExecutor $processExecutor,
+        private readonly BatchScriptBuilderInterface $batchScriptBuilder,
+        private readonly ProcessExecutorInterface $processExecutor,
+        private readonly string $pathSeparator = '\\',
+        private readonly string $scriptExtension = '.bat',
     ) {
     }
 
@@ -63,20 +74,23 @@ final class CourseVideoMerger
             mkdir($courseDestDir, 0777, true);
         }
 
-        $scanned = DirectoryScanner::scan($sourceDir . '\\' . $courseFolderName);
-        // PRESERVED BEHAVIOR, via a different MECHANISM than the
-        // original: the original passed whatever getDirContents()
-        // returned straight into file_listed() with no check, and
-        // file_listed()'s own `foreach ($files as ...)` on a string
-        // silently warns and iterates zero times in PHP 8 — so a
-        // missing source directory ends up with an empty plan either
-        // way. This makes that explicit (an is_array() check) instead
-        // of relying on the implicit foreach-on-string warning, but the
-        // RESULT — an empty plan that still proceeds through
-        // batch-script generation and execution rather than stopping —
-        // is unchanged. See DirectoryScanner's and this method's
-        // "dead guard" note below for the full original quirk.
-        $files = is_array($scanned) ? $scanned : [];
+        // CHANGED in TASK-007 (was a preserved-behavior is_array() guard
+        // through the TASK-004 refactor — see DirectoryScanner's
+        // docblock for the full history): DirectoryScanner::scan() now
+        // throws instead of returning a sentinel string on a missing
+        // directory. Caught per-course, not left to propagate out of
+        // mergeAll(), so one missing/misnamed course folder in
+        // VIDEO_FOLDERS doesn't abort the rest of the batch — closer to
+        // the ORIGINAL's practical effect (that course produced nothing
+        // and the tool moved on) than letting the whole run die, while
+        // still being a visible, logged error instead of a silent empty
+        // merge.
+        try {
+            $files = DirectoryScanner::scan($sourceDir . $this->pathSeparator . $courseFolderName);
+        } catch (\RuntimeException $e) {
+            fwrite(STDERR, "Skipping '{$courseFolderName}': {$e->getMessage()}\n");
+            return;
+        }
 
         $videoFiles = $this->batchPlanner->plan($files, $courseDestDir);
 
@@ -98,7 +112,7 @@ final class CourseVideoMerger
 
         $batchScript = $this->batchScriptBuilder->build($sourceDir, $courseDestDir, $slug, $budgetRatio);
 
-        $youtubeDescription = ChapterDescriptionBuilder::build($videoFiles, $sourceDir . $courseFolderName . '\\');
+        $youtubeDescription = ChapterDescriptionBuilder::build($videoFiles, $sourceDir . $courseFolderName . $this->pathSeparator);
         file_put_contents($sourceDir . '/youtube-' . $courseFolderName . mt_rand() . '.txt', $youtubeDescription);
 
         // Matches the original's exact stdout shape, including the
@@ -113,12 +127,12 @@ final class CourseVideoMerger
         $reencodeCommands = $this->buildReencodeCommands($videoFiles);
         $this->manifestWriter->write($sourceDir, $courseFolderName, $slug, $videoFiles);
 
-        $batchFilePath = $sourceDir . '/bat-' . $slug . '.bat';
+        $batchFilePath = $sourceDir . '/bat-' . $slug . $this->scriptExtension;
         file_put_contents($batchFilePath, $reencodeCommands . $batchScript);
 
         $this->fileOperations->renameAll($videoFiles);
 
-        $this->processExecutor->runBatchFile($batchFilePath);
+        $this->processExecutor->run($batchFilePath);
 
         echo 'Finished this directory :' . $courseFolderName . '<br>';
     }

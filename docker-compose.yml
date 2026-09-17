@@ -1,19 +1,26 @@
-# web-scraping-php — scraper container.
+# web-scraping-php — scraper + video-merge containers.
 #
-# Only one service: `scraper`. See Dockerfile header for why the
-# video-merge utility has no service here (Windows cmd.exe dependency,
-# not a Docker-config gap).
+# Two services: `scraper` (stateless, no volumes needed) and
+# `video-merge` (TASK-007 — see Dockerfile header for how it went from
+# excluded to real: ffmpeg from mwader/static-ffmpeg, a Linux shell
+# execution path parallel to the original cmd.exe one).
 #
-# [R92] No bind mounts are declared. index.php is stateless — it reads a
-# remote URL and writes JSON to stdout; there is no on-disk state to
-# persist. Capture output on the host via
+# [R92] `scraper` declares no bind mounts — index.php is stateless, reads
+# a remote URL and writes JSON to stdout. Capture output on the host via
 # `docker compose run --rm scraper > output.json` (stdout redirection
-# needs no volume).
+# needs no volume). `video-merge` DOES need volumes — it reads course
+# video files from disk and writes merged output back to disk — so it
+# binds one host directory to VIDEO_SOURCE_DIR and one to VIDEO_DEST_DIR,
+# both operator-supplied via .env (see .env.example), never baked into
+# the image.
 # [R60/R64/R102] Resource limits declared with the classic top-level
 # fields (cpu/memory/pids), enforced by a plain `docker compose up`/`run`
-# without needing `--compatibility` or Swarm.
-# [R91] Local build only — no external/registry image referenced for the
-# one service this repo defines.
+# without needing `--compatibility` or Swarm. `video-merge` gets a higher
+# ceiling than `scraper` — ffmpeg re-encoding is genuinely CPU/memory
+# heavy, unlike the scraper's single HTTP GET + HTML parse.
+# [R91] Local build only for both services — no external/registry image
+# referenced directly by a service (mwader/static-ffmpeg is pulled by the
+# Dockerfile's own multi-stage build, not referenced here).
 
 services:
   scraper:
@@ -27,5 +34,30 @@ services:
     mem_limit: 128m
     cpus: 0.5
     pids_limit: 50
+    security_opt:
+      - no-new-privileges:true
+
+  video-merge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    command: ["bin/process.php"]
+    environment:
+      # Linux paths, deliberately NOT the Windows defaults baked into
+      # config/video.php — those exist for the tool's native (non-Docker)
+      # environment; this container needs paths that exist inside IT
+      # (the /data/... mounts below), which is why all three of these are
+      # set explicitly rather than left to defaults.
+      VIDEO_SOURCE_DIR: /data/source/
+      VIDEO_DEST_DIR: /data/dest/
+      VIDEO_FOLDERS: ${VIDEO_MERGE_FOLDERS:-}
+    volumes:
+      - ${VIDEO_MERGE_SOURCE_DIR:-./data/video-source}:/data/source
+      - ${VIDEO_MERGE_DEST_DIR:-./data/video-dest}:/data/dest
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 100
     security_opt:
       - no-new-privileges:true

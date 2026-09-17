@@ -14,11 +14,16 @@ namespace WebScraping\VideoMerge\Infrastructure\Process;
  * calls could all shift subtly). The win here is that this is now a
  * single, mockable seam instead of a call buried inside a 60-line
  * function.
+ *
+ * TASK-007: implements ProcessExecutorInterface (method renamed
+ * runBatchFile -> run to match it) now that a second implementation
+ * exists — see LinuxShellProcessExecutor and PlatformResolver. No
+ * behavior change: still exactly `system('cmd /c ' . $scriptPath)`.
  */
-final class ProcessExecutor
+final class ProcessExecutor implements ProcessExecutorInterface
 {
-    public function runBatchFile(string $batchFilePath): void
+    public function run(string $scriptPath): void
     {
-        system('cmd /c ' . $batchFilePath);
+        system('cmd /c ' . $scriptPath);
     }
 }

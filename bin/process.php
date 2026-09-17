@@ -21,8 +21,7 @@ use WebScraping\VideoMerge\Infrastructure\FileSystem\FileOperations;
 use WebScraping\VideoMerge\Infrastructure\FileSystem\RenameManifestWriter;
 use WebScraping\VideoMerge\Infrastructure\Ffmpeg\FfmpegCommandBuilder;
 use WebScraping\VideoMerge\Infrastructure\Metadata\GetId3DurationReader;
-use WebScraping\VideoMerge\Infrastructure\Process\BatchScriptBuilder;
-use WebScraping\VideoMerge\Infrastructure\Process\ProcessExecutor;
+use WebScraping\VideoMerge\Infrastructure\Process\PlatformResolver;
 
 // Same RCE rationale as before this refactor: this tool shells out to a
 // generated .bat file via system() and has no authentication of its
@@ -46,15 +45,28 @@ require_once __DIR__ . '/../vendor/james-heinrich/getid3/getid3/getid3.php';
 
 $config = require __DIR__ . '/../config/video.php';
 
-$ffmpeg = new FfmpegCommandBuilder($config['ffmpeg_bin'], $config['video_codec'], $config['audio_codec']);
+$ffmpeg = new FfmpegCommandBuilder(
+    $config['ffmpeg_bin'],
+    $config['video_codec'],
+    $config['audio_codec'],
+    $config['legacy_path_prefix'],
+);
+
+// TASK-007: which script-builder/executor pair (and path
+// separator/script extension) this run uses is now decided in one place
+// — see PlatformResolver — instead of this file hardcoding the Windows
+// pair directly.
+$platform = PlatformResolver::resolve($config['platform'], $ffmpeg);
 
 $merger = new CourseVideoMerger(
-    batchPlanner: new VideoBatchPlanner(new GetId3DurationReader()),
+    batchPlanner: new VideoBatchPlanner(new GetId3DurationReader(), $platform->pathSeparator),
     ffmpeg: $ffmpeg,
     fileOperations: new FileOperations(),
-    manifestWriter: new RenameManifestWriter(),
-    batchScriptBuilder: new BatchScriptBuilder($ffmpeg),
-    processExecutor: new ProcessExecutor(),
+    manifestWriter: new RenameManifestWriter($config['legacy_path_prefix']),
+    batchScriptBuilder: $platform->scriptBuilder,
+    processExecutor: $platform->executor,
+    pathSeparator: $platform->pathSeparator,
+    scriptExtension: $platform->scriptExtension,
 );
 
 try {

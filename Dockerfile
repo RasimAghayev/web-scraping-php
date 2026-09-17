@@ -1,22 +1,32 @@
-# web-scraping-php — scraper image (PHP CLI)
+# web-scraping-php — scraper + video-merge image (PHP CLI)
 #
-# Scope decision (flagged, not silently applied): this repo holds TWO
-# independent CLI tools (see README). Only the scraper (index.php) is
-# built into this image. The video-merge utility
-# (video_merge.php/function.php/bin/process.php) is NOT included as a
-# runnable target here — its execution path
-# (ProcessExecutor::runBatchFile() -> system('cmd /c ' . $batchFilePath))
-# shells out to Windows cmd.exe against a generated .bat script. That is
-# not a portability nuance to paper over with a rewrite; it is the tool's
-# actual documented design (README "Known limitations: Still
-# Windows-shaped"). Adapting it to run for real on Linux would mean
-# rewriting the batch-generation into a shell/ffmpeg-only pipeline — new
-# business logic, which the containerization task explicitly excludes
-# (adapt the working model to the new system; do not extend it). The
-# source is still copied into the image (single codebase, nothing to
-# gain from splitting it), so the code is available for reference/`exec`,
-# but `cmd` does not exist in this image and that entry point will fail
-# fast and loud (command-not-found) rather than pretend to work.
+# This repo holds TWO independent CLI tools (see README): the scraper
+# (index.php, this image's default CMD) and the video-merge utility
+# (video_merge.php/function.php/bin/process.php).
+#
+# TASK-007 supersedes the earlier exclusion of the video-merge tool from
+# this image. What changed and why it's now real, not just flagged
+# differently:
+#   - The tool's ONLY hard Windows dependency was two things: (1) an
+#     ffmpeg.exe binary at a hardcoded Windows path, and (2) shelling out
+#     to cmd.exe against a generated .bat script
+#     (ProcessExecutor::runBatchFile()). (1) is solved below — ffmpeg is
+#     now obtained FROM a dedicated ffmpeg image (mwader/static-ffmpeg),
+#     copied in via multi-stage COPY --from=, exactly like vendor/ is
+#     copied from the composer stage. (2) is solved by
+#     LinuxShellProcessExecutor + ShellScriptBuilder, a POSIX-shell
+#     execution path parallel to the Windows one, selected at runtime via
+#     PlatformResolver (config/video.php's `platform` key, defaulted to
+#     `linux` in THIS image via the ENV below — see docker-compose.yml's
+#     `video-merge` service).
+#   - What's still Windows-flavored and stays that way on purpose: the
+#     Windows execution path (BatchScriptBuilder/ProcessExecutor,
+#     cmd.exe) is unchanged and still the default OUTSIDE this image
+#     (config/video.php's `platform` defaults to `auto`, which detects
+#     Windows via PHP_OS_FAMILY when run directly on a Windows host,
+#     matching the original tool's native environment) — this image
+#     doesn't replace that, it adds a second, real way to run the same
+#     tool.
 #
 # R91/R92/R102: multi-stage (composer-managed vendor/ is a real build
 # artifact here, unlike rest-api-mvc-php's custom autoloader — see the
@@ -25,13 +35,14 @@
 #
 # HEALTHCHECK (R91 checklist item) deliberately omitted, flagged rather
 # than faked: the default CMD is index.php, a one-shot script that
-# scrapes once and exits (see README "Running it"). Docker's HEALTHCHECK
-# polls a container on an interval (default first probe at
-# --start-period, minimum realistic value ~1s) but this container has
-# already exited by the time any meaningful interval elapses — there is
-# no long-running process for a healthcheck to observe. Adding one would
-# either never fire (container gone) or require inventing a fake
-# always-up process, which is worse than having none.
+# scrapes once and exits (see README "Running it"); the video-merge
+# service (docker-compose.yml) is the same kind of one-shot batch job,
+# not a long-running server. Docker's HEALTHCHECK polls a container on an
+# interval, but both containers have already exited by the time any
+# meaningful interval elapses — there is no long-running process for a
+# healthcheck to observe. Adding one would either never fire (container
+# gone) or require inventing a fake always-up process, which is worse
+# than having none.
 
 # syntax=docker/dockerfile:1
 
@@ -44,6 +55,18 @@ ARG PHP_IMAGE=php:8.1-cli-alpine3.19
 # Same PHP minor/Alpine version as rest-api-mvc-php's image, deliberately —
 # one base version across the portfolio's PHP repos instead of a new one
 # per repo.
+
+# TASK-007: statically-built ffmpeg, obtained from a dedicated image
+# rather than apk-installed or manually downloaded — mwader/static-ffmpeg
+# is a widely-used, scratch-based image whose entire purpose is being
+# COPY --from='d in a multi-stage build (verified for real: pulled,
+# ran `/ffmpeg -version` standalone, confirmed libx264/aac support —
+# both codecs config/video.php's default video_codec/audio_codec need).
+# Same tag-pinning disclosure as PHP_IMAGE above (no digest available in
+# this build environment).
+ARG FFMPEG_IMAGE=mwader/static-ffmpeg:7.1
+
+FROM ${FFMPEG_IMAGE} AS ffmpeg
 
 FROM composer:2 AS vendor
 WORKDIR /app
@@ -58,15 +81,27 @@ RUN composer install --no-dev --no-scripts --no-interaction --optimize-autoloade
 
 FROM ${PHP_IMAGE} AS runtime
 LABEL org.opencontainers.image.title="web-scraping-php"
-LABEL org.opencontainers.image.description="PHP scraper (downloadly.ir course listings) — video-merge utility excluded, see Dockerfile header"
+LABEL org.opencontainers.image.description="PHP scraper (downloadly.ir course listings) + video-merge utility (ffmpeg via mwader/static-ffmpeg)"
 
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
+
+# TASK-007: the video-merge tool's defaults for this image. FFMPEG_BIN
+# points at the binary copied in below (not a host-installed path); the
+# Windows-path VIDEO_SOURCE_DIR/VIDEO_DEST_DIR/LEGACY_PATH_PREFIX
+# defaults from config/video.php make no sense inside a Linux container,
+# so the video-merge compose service (docker-compose.yml) sets all three
+# explicitly — these two ENV lines are the ones safe to bake into the
+# image itself because they're about the image's own filesystem, not the
+# operator's data layout.
+ENV FFMPEG_BIN=/usr/local/bin/ffmpeg
+ENV VIDEO_MERGE_PLATFORM=linux
 
 RUN adduser -D -u 1000 appuser
 
 WORKDIR /app
 
+COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 COPY --from=vendor /app/vendor ./vendor
 COPY composer.json composer.lock ./
 COPY index.php ./index.php

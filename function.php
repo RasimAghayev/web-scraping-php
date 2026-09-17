@@ -28,8 +28,7 @@ use WebScraping\VideoMerge\Infrastructure\FileSystem\FileOperations;
 use WebScraping\VideoMerge\Infrastructure\FileSystem\RenameManifestWriter;
 use WebScraping\VideoMerge\Infrastructure\Ffmpeg\FfmpegCommandBuilder;
 use WebScraping\VideoMerge\Infrastructure\Metadata\GetId3DurationReader;
-use WebScraping\VideoMerge\Infrastructure\Process\BatchScriptBuilder;
-use WebScraping\VideoMerge\Infrastructure\Process\ProcessExecutor;
+use WebScraping\VideoMerge\Infrastructure\Process\PlatformResolver;
 use WebScraping\VideoMerge\Support\DurationFormatter;
 use WebScraping\VideoMerge\Support\Slugger;
 
@@ -45,8 +44,13 @@ function time_elapsed_A($secs): string
     return DurationFormatter::format((float) $secs);
 }
 
-/** @deprecated Use WebScraping\VideoMerge\Infrastructure\FileSystem\DirectoryScanner::scan() directly. */
-function getDirContents($dir, &$results = []): array|string
+/**
+ * @deprecated Use WebScraping\VideoMerge\Infrastructure\FileSystem\DirectoryScanner::scan() directly.
+ * @throws \RuntimeException if $dir does not exist (TASK-007: this used
+ *         to return the string 'Qovluq yoxdur--' instead; fixed to throw,
+ *         see DirectoryScanner's docblock).
+ */
+function getDirContents($dir, &$results = []): array
 {
     return DirectoryScanner::scan((string) $dir, $results);
 }
@@ -65,9 +69,14 @@ function file_listed($dir2, &$files = [], &$results = []): array
 function file_write($dir0, $old_file, $new_file, &$results = []): string
 {
     $config = require __DIR__ . '/config/video.php';
-    $ffmpeg = new FfmpegCommandBuilder($config['ffmpeg_bin'], $config['video_codec'], $config['audio_codec']);
+    $ffmpeg = new FfmpegCommandBuilder(
+        $config['ffmpeg_bin'],
+        $config['video_codec'],
+        $config['audio_codec'],
+        $config['legacy_path_prefix'],
+    );
 
-    (new RenameManifestWriter())->write((string) $dir0, (string) $old_file, (string) $new_file, $results);
+    (new RenameManifestWriter($config['legacy_path_prefix']))->write((string) $dir0, (string) $old_file, (string) $new_file, $results);
 
     $commands = '';
     foreach ($results as $video) {
@@ -103,15 +112,24 @@ function action_file($action, &$results = [])
 function runProccess($dir1s, $dir0, $dir4): void
 {
     $config = require __DIR__ . '/config/video.php';
-    $ffmpeg = new FfmpegCommandBuilder($config['ffmpeg_bin'], $config['video_codec'], $config['audio_codec']);
+    $ffmpeg = new FfmpegCommandBuilder(
+        $config['ffmpeg_bin'],
+        $config['video_codec'],
+        $config['audio_codec'],
+        $config['legacy_path_prefix'],
+    );
+
+    $platform = PlatformResolver::resolve($config['platform'], $ffmpeg);
 
     $merger = new CourseVideoMerger(
-        batchPlanner: new VideoBatchPlanner(new GetId3DurationReader()),
+        batchPlanner: new VideoBatchPlanner(new GetId3DurationReader(), $platform->pathSeparator),
         ffmpeg: $ffmpeg,
         fileOperations: new FileOperations(),
-        manifestWriter: new RenameManifestWriter(),
-        batchScriptBuilder: new BatchScriptBuilder($ffmpeg),
-        processExecutor: new ProcessExecutor(),
+        manifestWriter: new RenameManifestWriter($config['legacy_path_prefix']),
+        batchScriptBuilder: $platform->scriptBuilder,
+        processExecutor: $platform->executor,
+        pathSeparator: $platform->pathSeparator,
+        scriptExtension: $platform->scriptExtension,
     );
 
     $merger->mergeAll((array) $dir1s, (string) $dir0, (string) $dir4);
