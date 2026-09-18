@@ -47,6 +47,14 @@ final class DirectoryScanner
 
         foreach ($files as $value) {
             $path = realpath($dir . DIRECTORY_SEPARATOR . $value);
+            if ($path === false) {
+                // scandir() listed it but realpath() can't resolve it
+                // (vanished mid-scan, broken symlink, permission race).
+                // Skipping rather than passing `false` into is_dir() below,
+                // which would TypeError under strict_types=1 and crash the
+                // whole batch instead of just missing this one entry.
+                continue;
+            }
             if (!is_dir($path)) {
                 $results[] = $path;
             } elseif ($value !== '.' && $value !== '..') {
