@@ -64,7 +64,7 @@ ARG PHP_IMAGE=php:8.1-cli-alpine3.19
 # both codecs config/video.php's default video_codec/audio_codec need).
 # Same tag-pinning disclosure as PHP_IMAGE above (no digest available in
 # this build environment).
-ARG FFMPEG_IMAGE=mwader/static-ffmpeg:7.1
+ARG FFMPEG_IMAGE=mwader/static-ffmpeg:9.0
 
 FROM ${FFMPEG_IMAGE} AS ffmpeg
 
