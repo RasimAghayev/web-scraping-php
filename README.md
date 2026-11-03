@@ -1,4 +1,6 @@
 # web-scraping-php
+![Views](https://hits.sh/github.com/RasimAghayev/web-scraping-php.svg?label=views&color=0e75b6)
+
 
 A small PHP toolkit with two independent parts:
 
