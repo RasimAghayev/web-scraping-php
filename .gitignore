@@ -31,3 +31,22 @@ Homestead.json
 /.vagrant
 .phpunit.result.cache
 
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+
+# Secrets & env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Logs & temp
+*.log
+/tmp/

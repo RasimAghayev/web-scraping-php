@@ -1,0 +1,8 @@
+﻿#!/usr/bin/env sh
+# Secret scan pre-commit hook (gitleaks). Fails commit if secrets are detected in staged changes.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --verbose
+  exit $?
+fi
+echo "gitleaks not found; skipping secret scan" >&2
+exit 0
