@@ -71,8 +71,7 @@
                 "issues": "https://github.com/JamesHeinrich/getID3/issues",
                 "source": "https://github.com/JamesHeinrich/getID3/tree/v1.9.28"
             },
-            "time": "2026-10-30T21:48:34+00:00",
-            "published-time": "2026-10-30T21:49:44+00:00"
+            "time": "2026-10-30T21:48:34+00:00"
         },
         {
             "name": "masterminds/html5",
@@ -139,8 +138,7 @@
                 "issues": "https://github.com/Masterminds/html5-php/issues",
                 "source": "https://github.com/Masterminds/html5-php/tree/2.11.0"
             },
-            "time": "2026-08-18T06:18:41+00:00",
-            "published-time": "2026-08-18T06:20:37+00:00"
+            "time": "2026-08-18T06:18:41+00:00"
         },
         {
             "name": "psr/container",
@@ -193,8 +191,7 @@
                 "issues": "https://github.com/php-fig/container/issues",
                 "source": "https://github.com/php-fig/container/tree/2.0.2"
             },
-            "time": "2021-11-05T16:47:00+00:00",
-            "published-time": "2021-11-05T16:53:27+00:00"
+            "time": "2021-11-05T16:47:00+00:00"
         },
         {
             "name": "psr/log",
@@ -244,8 +241,7 @@
             "support": {
                 "source": "https://github.com/php-fig/log/tree/3.0.2"
             },
-            "time": "2024-09-11T13:17:53+00:00",
-            "published-time": "2024-09-11T13:21:14+00:00"
+            "time": "2024-09-11T13:17:53+00:00"
         },
         {
             "name": "symfony/browser-kit",
@@ -318,8 +314,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-31T16:11:44+00:00",
-            "published-time": "2026-11-04T11:24:27+00:00"
+            "time": "2026-10-31T16:11:44+00:00"
         },
         {
             "name": "symfony/css-selector",
@@ -388,8 +383,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-18T12:24:59+00:00",
-            "published-time": "2026-10-28T18:16:52+00:00"
+            "time": "2026-10-18T12:24:59+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
@@ -460,8 +454,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-06-05T06:23:12+00:00",
-            "published-time": "2026-06-27T21:46:34+00:00"
+            "time": "2026-06-05T06:23:12+00:00"
         },
         {
             "name": "symfony/dom-crawler",
@@ -532,8 +525,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-08-20T17:31:07+00:00",
-            "published-time": "2026-08-22T13:39:48+00:00"
+            "time": "2026-08-20T17:31:07+00:00"
         },
         {
             "name": "symfony/http-client",
@@ -631,8 +623,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-11-04T08:16:31+00:00",
-            "published-time": "2026-11-04T11:25:22+00:00"
+            "time": "2026-11-04T08:16:31+00:00"
         },
         {
             "name": "symfony/http-client-contracts",
@@ -714,8 +705,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-08-04T08:41:16+00:00",
-            "published-time": "2026-08-30T19:56:36+00:00"
+            "time": "2026-08-04T08:41:16+00:00"
         },
         {
             "name": "symfony/polyfill-ctype",
@@ -798,8 +788,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-04-10T16:19:22+00:00",
-            "published-time": "2026-04-26T14:44:50+00:00"
+            "time": "2026-04-10T16:19:22+00:00"
         },
         {
             "name": "symfony/polyfill-mbstring",
@@ -884,8 +873,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-05-27T06:59:30+00:00",
-            "published-time": "2026-06-09T06:07:20+00:00"
+            "time": "2026-05-27T06:59:30+00:00"
         },
         {
             "name": "symfony/polyfill-php83",
@@ -965,8 +953,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-07-01T12:47:55+00:00",
-            "published-time": "2026-07-28T08:42:18+00:00"
+            "time": "2026-07-01T12:47:55+00:00"
         },
         {
             "name": "symfony/service-contracts",
@@ -1053,8 +1040,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-07-27T15:39:01+00:00",
-            "published-time": "2026-08-30T19:56:37+00:00"
+            "time": "2026-07-27T15:39:01+00:00"
         }
     ],
     "packages-dev": [
@@ -1295,11 +1281,11 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "2.3.5",
+            "version": "2.3.7",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/645a1bd6bead15fc1b8474137467961d0fa30a79",
-                "reference": "645a1bd6bead15fc1b8474137467961d0fa30a79",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/90c91c2498849ab8cc4e873864bbf1cb2bf6ea12",
+                "reference": "90c91c2498849ab8cc4e873864bbf1cb2bf6ea12",
                 "shasum": ""
             },
             "require": {
@@ -1355,8 +1341,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-11-03T12:14:22+00:00",
-            "published-time": "2026-11-03T12:14:36+00:00"
+            "time": "2026-11-19T10:31:11+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -2786,5 +2771,5 @@
         "ext-json": "*"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.11.0"
+    "plugin-api-version": "2.9.0"
 }
